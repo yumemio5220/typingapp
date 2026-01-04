@@ -5,6 +5,7 @@ export interface TypingProblem {
 }
 
 export interface TypingResult {
+  score: number;
   wpm: number;
   cpm: number;
   accuracy: number;
