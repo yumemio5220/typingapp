@@ -16,13 +16,18 @@ export default function Home() {
   const [correctChars, setCorrectChars] = useState(0);
   const [totalChars, setTotalChars] = useState(0);
   const [startTime, setStartTime] = useState<number | null>(null);
-  const [timeLeft, setTimeLeft] = useState(60);
+  const [timeLeft, setTimeLeft] = useState(10);
   const [results, setResults] = useLocalStorage<TypingResult[]>('typing-results', []);
   const [completedWords, setCompletedWords] = useState<string[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const usedWordsRef = useRef<Set<string>>(new Set());
+  const startTimeRef = useRef<number | null>(null);
+  const correctCharsRef = useRef(0);
+  const totalCharsRef = useRef(0);
+  const completedWordsRef = useRef<string[]>([]);
+  const finishGameRef = useRef<(() => void) | null>(null);
 
   const getTargetRomaji = () => {
     if (!currentProblem) return '';
@@ -33,23 +38,6 @@ export default function Home() {
 
   const targetRomaji = getTargetRomaji();
 
-  const startGame = useCallback(() => {
-    // 最初の問題を生成
-    usedWordsRef.current.clear();
-    const firstProblem = generateNextProblem(1, usedWordsRef.current);
-
-    setCurrentProblem(firstProblem);
-    setGameState('playing');
-    setProblemCount(0);
-    setUserInput('');
-    setCorrectChars(0);
-    setTotalChars(0);
-    setCompletedWords([]);
-    setStartTime(Date.now());
-    setTimeLeft(60);
-    inputRef.current?.focus();
-  }, []);
-
   const finishGame = useCallback(() => {
     setGameState('finished');
     const now = Date.now();
@@ -59,25 +47,57 @@ export default function Home() {
       timerRef.current = null;
     }
 
-    if (startTime) {
-      const timeElapsed = (now - startTime) / 1000;
+    if (startTimeRef.current) {
+      const timeElapsed = (now - startTimeRef.current) / 1000;
       const minutes = timeElapsed / 60;
-      const wpm = Math.round((correctChars / 5) / minutes);
-      const cpm = Math.round(correctChars / minutes);
-      const accuracy = totalChars > 0 ? Math.round((correctChars / totalChars) * 100) : 0;
+      const wpm = Math.round((correctCharsRef.current / 5) / minutes);
+      const cpm = Math.round(correctCharsRef.current / minutes);
+      const accuracy = totalCharsRef.current > 0 ? Math.round((correctCharsRef.current / totalCharsRef.current) * 100) : 0;
 
       const result: TypingResult = {
+        score: correctCharsRef.current,
         wpm,
         cpm,
         accuracy,
         timeElapsed,
-        problemText: completedWords.slice(0, 5).join(', ') + (completedWords.length > 5 ? ' ...' : ''),
+        problemText: completedWordsRef.current.slice(0, 5).join(', ') + (completedWordsRef.current.length > 5 ? ' ...' : ''),
         date: new Date().toISOString(),
       };
 
-      setResults([result, ...results].slice(0, 10));
+      setResults((prevResults) => [result, ...prevResults].slice(0, 10));
     }
-  }, [startTime, correctChars, totalChars, completedWords, results, setResults]);
+  }, [setResults]);
+
+  // Refを同期
+  useEffect(() => {
+    startTimeRef.current = startTime;
+    correctCharsRef.current = correctChars;
+    totalCharsRef.current = totalChars;
+    completedWordsRef.current = completedWords;
+    finishGameRef.current = finishGame;
+  }, [startTime, correctChars, totalChars, completedWords, finishGame]);
+
+  const startGame = useCallback(() => {
+    // 最初の問題を生成
+    usedWordsRef.current.clear();
+    const firstProblem = generateNextProblem(1, usedWordsRef.current);
+
+    const now = Date.now();
+    setCurrentProblem(firstProblem);
+    setGameState('playing');
+    setProblemCount(0);
+    setUserInput('');
+    setCorrectChars(0);
+    setTotalChars(0);
+    setCompletedWords([]);
+    setStartTime(now);
+    startTimeRef.current = now;
+    correctCharsRef.current = 0;
+    totalCharsRef.current = 0;
+    completedWordsRef.current = [];
+    setTimeLeft(10);
+    inputRef.current?.focus();
+  }, []);
 
   const resetGame = useCallback(() => {
     setGameState('ready');
@@ -88,7 +108,11 @@ export default function Home() {
     setTotalChars(0);
     setCompletedWords([]);
     setStartTime(null);
-    setTimeLeft(60);
+    startTimeRef.current = null;
+    correctCharsRef.current = 0;
+    totalCharsRef.current = 0;
+    completedWordsRef.current = [];
+    setTimeLeft(10);
     usedWordsRef.current.clear();
   }, []);
 
@@ -97,7 +121,7 @@ export default function Home() {
       timerRef.current = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
-            finishGame();
+            finishGameRef.current?.();
             return 0;
           }
           return prev - 1;
@@ -116,7 +140,7 @@ export default function Home() {
         timerRef.current = null;
       }
     };
-  }, [gameState, finishGame]);
+  }, [gameState]);
 
   useEffect(() => {
     if (gameState !== 'ready') return;
@@ -166,7 +190,10 @@ export default function Home() {
     setUserInput(input);
 
     if (acceptable.some(romaji => romaji === input)) {
-      setCorrectChars((prev) => prev + input.length);
+      // 最後の文字も正しいのでカウント
+      if (input.length > prevInputLength) {
+        setCorrectChars((prev) => prev + 1);
+      }
       setCompletedWords((prev) => [...prev, currentProblem.text]);
       setProblemCount((prev) => prev + 1);
 
@@ -214,9 +241,7 @@ export default function Home() {
                       <thead className="bg-gray-100">
                         <tr>
                           <th className="px-4 py-2 text-left">日時</th>
-                          <th className="px-4 py-2 text-right">WPM</th>
-                          <th className="px-4 py-2 text-right">CPM</th>
-                          <th className="px-4 py-2 text-right">正確率</th>
+                          <th className="px-4 py-2 text-right">スコア</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -225,9 +250,7 @@ export default function Home() {
                             <td className="px-4 py-2">
                               {new Date(result.date).toLocaleString('ja-JP')}
                             </td>
-                            <td className="px-4 py-2 text-right font-bold">{result.wpm}</td>
-                            <td className="px-4 py-2 text-right">{result.cpm}</td>
-                            <td className="px-4 py-2 text-right">{result.accuracy}%</td>
+                            <td className="px-4 py-2 text-right font-bold">{result.score}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -242,7 +265,7 @@ export default function Home() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div className="text-lg font-bold text-gray-700">
-                  完了: {problemCount}問
+                  スコア: {correctChars}
                 </div>
                 <div className="text-2xl font-bold text-purple-600">
                   残り {timeLeft}秒
@@ -304,30 +327,21 @@ export default function Home() {
                 結果
               </h2>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-purple-50 p-6 rounded-lg text-center">
-                  <div className="text-sm text-gray-600 mb-2">WPM</div>
-                  <div className="text-4xl font-bold text-purple-600">
-                    {results[0]?.wpm || 0}
-                  </div>
-                </div>
-                <div className="bg-pink-50 p-6 rounded-lg text-center">
-                  <div className="text-sm text-gray-600 mb-2">CPM</div>
-                  <div className="text-4xl font-bold text-pink-600">
-                    {results[0]?.cpm || 0}
-                  </div>
-                </div>
-                <div className="bg-blue-50 p-6 rounded-lg text-center">
-                  <div className="text-sm text-gray-600 mb-2">正確率</div>
-                  <div className="text-4xl font-bold text-blue-600">
-                    {results[0]?.accuracy || 0}%
+              <div className="flex justify-center">
+                <div className="bg-purple-50 p-8 rounded-lg text-center">
+                  <div className="text-sm text-gray-600 mb-2">スコア</div>
+                  <div className="text-5xl font-bold text-purple-600">
+                    {correctChars}
                   </div>
                 </div>
               </div>
 
-              <div className="text-center space-y-4">
+              <div className="text-center space-y-2">
                 <p className="text-gray-600">
                   完了した問題: {problemCount}問
+                </p>
+                <p className="text-gray-600">
+                  ミスタイプ: {totalChars - correctChars}回
                 </p>
                 <p className="text-sm text-gray-500">
                   Escキー でやり直す
