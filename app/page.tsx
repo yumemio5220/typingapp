@@ -11,6 +11,7 @@ type GameState = 'ready' | 'playing' | 'finished';
 export default function Home() {
   const [gameState, setGameState] = useState<GameState>('ready');
   const [currentProblemIndex, setCurrentProblemIndex] = useState(0);
+  const [shuffledIndices, setShuffledIndices] = useState<number[]>([]);
   const [userInput, setUserInput] = useState('');
   const [correctChars, setCorrectChars] = useState(0);
   const [totalChars, setTotalChars] = useState(0);
@@ -22,7 +23,9 @@ export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const currentProblem = typingProblems[currentProblemIndex];
+  const currentProblem = shuffledIndices.length > 0
+    ? typingProblems[shuffledIndices[currentProblemIndex]]
+    : typingProblems[0];
 
   const getTargetRomaji = () => {
     if (!currentProblem) return '';
@@ -66,6 +69,14 @@ export default function Home() {
   }, [gameState]);
 
   const startGame = () => {
+    // Fisher-Yates shuffle algorithm
+    const indices = Array.from({ length: typingProblems.length }, (_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+
+    setShuffledIndices(indices);
     setGameState('playing');
     setCurrentProblemIndex(0);
     setUserInput('');
@@ -143,6 +154,7 @@ export default function Home() {
   const resetGame = () => {
     setGameState('ready');
     setCurrentProblemIndex(0);
+    setShuffledIndices([]);
     setUserInput('');
     setCorrectChars(0);
     setTotalChars(0);
@@ -151,11 +163,6 @@ export default function Home() {
     setTimeLeft(60);
   };
 
-  const selectProblem = (index: number) => {
-    if (gameState === 'ready') {
-      setCurrentProblemIndex(index);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 py-4 sm:py-8 px-2 sm:px-4">
@@ -169,7 +176,7 @@ export default function Home() {
             <div className="space-y-6">
               <div className="text-center">
                 <p className="text-lg text-gray-700 mb-4">
-                  問題を選択してスタートボタンを押してください
+                  スタートボタンを押してください
                 </p>
                 <button
                   onClick={startGame}
@@ -179,25 +186,6 @@ export default function Home() {
                 </button>
               </div>
 
-              <div className="mt-8">
-                <h2 className="text-xl font-bold mb-4">問題一覧</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {typingProblems.map((problem, index) => (
-                    <button
-                      key={problem.id}
-                      onClick={() => selectProblem(index)}
-                      className={`p-3 text-left rounded-lg border-2 transition-colors ${
-                        currentProblemIndex === index
-                          ? 'border-purple-500 bg-purple-50'
-                          : 'border-gray-200 hover:border-purple-300'
-                      }`}
-                    >
-                      <div className="font-medium">{problem.text}</div>
-                      <div className="text-sm text-gray-500">{problem.hiragana}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
 
               {results.length > 0 && (
                 <div className="mt-8">
