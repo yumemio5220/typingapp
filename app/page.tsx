@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { TypingProblem, TypingResult } from '@/types/typing';
 import { hiraganaToRomaji } from '@/utils/romajiConverter';
 import { generateNextProblem } from '@/utils/problemGenerator';
@@ -16,7 +16,6 @@ export default function Home() {
   const [correctChars, setCorrectChars] = useState(0);
   const [totalChars, setTotalChars] = useState(0);
   const [startTime, setStartTime] = useState<number | null>(null);
-  const [endTime, setEndTime] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(60);
   const [results, setResults] = useLocalStorage<TypingResult[]>('typing-results', []);
   const [completedWords, setCompletedWords] = useState<string[]>([]);
@@ -34,39 +33,7 @@ export default function Home() {
 
   const targetRomaji = getTargetRomaji();
 
-  const finishGameRef = useRef<(() => void) | undefined>(undefined);
-
-  useEffect(() => {
-    finishGameRef.current = finishGame;
-  });
-
-  useEffect(() => {
-    if (gameState === 'playing' && timerRef.current === null) {
-      timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            finishGameRef.current?.();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-
-    if (gameState !== 'playing' && timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [gameState]);
-
-  const startGame = () => {
+  const startGame = useCallback(() => {
     // 最初の問題を生成
     usedWordsRef.current.clear();
     const firstProblem = generateNextProblem(1, usedWordsRef.current);
@@ -79,15 +46,13 @@ export default function Home() {
     setTotalChars(0);
     setCompletedWords([]);
     setStartTime(Date.now());
-    setEndTime(null);
     setTimeLeft(60);
     inputRef.current?.focus();
-  };
+  }, []);
 
-  const finishGame = () => {
+  const finishGame = useCallback(() => {
     setGameState('finished');
     const now = Date.now();
-    setEndTime(now);
 
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -112,7 +77,74 @@ export default function Home() {
 
       setResults([result, ...results].slice(0, 10));
     }
-  };
+  }, [startTime, correctChars, totalChars, completedWords, results, setResults]);
+
+  const resetGame = useCallback(() => {
+    setGameState('ready');
+    setCurrentProblem(null);
+    setProblemCount(0);
+    setUserInput('');
+    setCorrectChars(0);
+    setTotalChars(0);
+    setCompletedWords([]);
+    setStartTime(null);
+    setTimeLeft(60);
+    usedWordsRef.current.clear();
+  }, []);
+
+  useEffect(() => {
+    if (gameState === 'playing' && timerRef.current === null) {
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            finishGame();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    if (gameState !== 'playing' && timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [gameState, finishGame]);
+
+  useEffect(() => {
+    if (gameState !== 'ready') return;
+
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 's' || e.key === ' ') {
+        e.preventDefault();
+        startGame();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [gameState, startGame]);
+
+  useEffect(() => {
+    if (gameState === 'ready') return;
+
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        resetGame();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [gameState, resetGame]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (gameState !== 'playing' || !currentProblem) return;
@@ -147,20 +179,6 @@ export default function Home() {
     }
   };
 
-  const resetGame = () => {
-    setGameState('ready');
-    setCurrentProblem(null);
-    setProblemCount(0);
-    setUserInput('');
-    setCorrectChars(0);
-    setTotalChars(0);
-    setCompletedWords([]);
-    setStartTime(null);
-    setEndTime(null);
-    setTimeLeft(60);
-    usedWordsRef.current.clear();
-  };
-
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 py-4 sm:py-8 px-2 sm:px-4">
@@ -175,6 +193,9 @@ export default function Home() {
               <div className="text-center">
                 <p className="text-lg text-gray-700 mb-4">
                   スタートボタンを押してください
+                </p>
+                <p className="text-sm text-gray-500 mb-4">
+                  または sキー / スペースキー でスタート
                 </p>
                 <button
                   onClick={startGame}
@@ -263,7 +284,10 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="flex justify-center gap-4">
+              <div className="text-center">
+                <p className="text-sm text-gray-500 mb-2">
+                  Escキー でやり直す
+                </p>
                 <button
                   onClick={resetGame}
                   className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
@@ -304,6 +328,9 @@ export default function Home() {
               <div className="text-center space-y-4">
                 <p className="text-gray-600">
                   完了した問題: {problemCount}問
+                </p>
+                <p className="text-sm text-gray-500">
+                  Escキー でやり直す
                 </p>
                 <button
                   onClick={resetGame}
