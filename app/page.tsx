@@ -34,7 +34,7 @@ export default function Home() {
 
   const targetRomaji = getTargetRomaji();
 
-  const finishGameRef = useRef<() => void>();
+  const finishGameRef = useRef<(() => void) | undefined>(undefined);
 
   useEffect(() => {
     finishGameRef.current = finishGame;
