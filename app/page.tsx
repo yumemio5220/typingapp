@@ -16,7 +16,7 @@ export default function Home() {
   const [correctChars, setCorrectChars] = useState(0);
   const [totalChars, setTotalChars] = useState(0);
   const [startTime, setStartTime] = useState<number | null>(null);
-  const [timeLeft, setTimeLeft] = useState(10);
+  const [timeLeft, setTimeLeft] = useState(60);
   const [results, setResults] = useLocalStorage<TypingResult[]>('typing-results', []);
   const [completedWords, setCompletedWords] = useState<string[]>([]);
   const [countdown, setCountdown] = useState(3);
@@ -97,7 +97,7 @@ export default function Home() {
     correctCharsRef.current = 0;
     totalCharsRef.current = 0;
     completedWordsRef.current = [];
-    setTimeLeft(10);
+    setTimeLeft(60);
     usedWordsRef.current.clear();
   }, []);
 
@@ -123,7 +123,7 @@ export default function Home() {
       correctCharsRef.current = 0;
       totalCharsRef.current = 0;
       completedWordsRef.current = [];
-      setTimeLeft(10);
+      setTimeLeft(60);
       inputRef.current?.focus();
       return;
     }
