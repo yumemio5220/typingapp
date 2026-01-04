@@ -1,17 +1,17 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { typingProblems } from '@/data/problems';
-import { hiraganaToRomaji, getAcceptableRomaji } from '@/utils/romajiConverter';
-import { TypingResult } from '@/types/typing';
+import { TypingProblem, TypingResult } from '@/types/typing';
+import { hiraganaToRomaji } from '@/utils/romajiConverter';
+import { generateNextProblem } from '@/utils/problemGenerator';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 type GameState = 'ready' | 'playing' | 'finished';
 
 export default function Home() {
   const [gameState, setGameState] = useState<GameState>('ready');
-  const [currentProblemIndex, setCurrentProblemIndex] = useState(0);
-  const [shuffledIndices, setShuffledIndices] = useState<number[]>([]);
+  const [currentProblem, setCurrentProblem] = useState<TypingProblem | null>(null);
+  const [problemCount, setProblemCount] = useState(0);
   const [userInput, setUserInput] = useState('');
   const [correctChars, setCorrectChars] = useState(0);
   const [totalChars, setTotalChars] = useState(0);
@@ -19,13 +19,11 @@ export default function Home() {
   const [endTime, setEndTime] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(60);
   const [results, setResults] = useLocalStorage<TypingResult[]>('typing-results', []);
+  const [completedWords, setCompletedWords] = useState<string[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const currentProblem = shuffledIndices.length > 0
-    ? typingProblems[shuffledIndices[currentProblemIndex]]
-    : typingProblems[0];
+  const usedWordsRef = useRef<Set<string>>(new Set());
 
   const getTargetRomaji = () => {
     if (!currentProblem) return '';
@@ -69,19 +67,17 @@ export default function Home() {
   }, [gameState]);
 
   const startGame = () => {
-    // Fisher-Yates shuffle algorithm
-    const indices = Array.from({ length: typingProblems.length }, (_, i) => i);
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
+    // 最初の問題を生成
+    usedWordsRef.current.clear();
+    const firstProblem = generateNextProblem(1, usedWordsRef.current);
 
-    setShuffledIndices(indices);
+    setCurrentProblem(firstProblem);
     setGameState('playing');
-    setCurrentProblemIndex(0);
+    setProblemCount(0);
     setUserInput('');
     setCorrectChars(0);
     setTotalChars(0);
+    setCompletedWords([]);
     setStartTime(Date.now());
     setEndTime(null);
     setTimeLeft(60);
@@ -110,7 +106,7 @@ export default function Home() {
         cpm,
         accuracy,
         timeElapsed,
-        problemText: typingProblems.slice(0, currentProblemIndex + 1).map(p => p.text).join(', '),
+        problemText: completedWords.slice(0, 5).join(', ') + (completedWords.length > 5 ? ' ...' : ''),
         date: new Date().toISOString(),
       };
 
@@ -119,7 +115,7 @@ export default function Home() {
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (gameState !== 'playing') return;
+    if (gameState !== 'playing' || !currentProblem) return;
 
     const input = e.target.value.toLowerCase();
     const prevInputLength = userInput.length;
@@ -139,13 +135,13 @@ export default function Home() {
 
     if (acceptable.some(romaji => romaji === input)) {
       setCorrectChars((prev) => prev + input.length);
+      setCompletedWords((prev) => [...prev, currentProblem.text]);
+      setProblemCount((prev) => prev + 1);
 
-      if (currentProblemIndex < typingProblems.length - 1) {
-        setCurrentProblemIndex((prev) => prev + 1);
-        setUserInput('');
-      } else {
-        finishGame();
-      }
+      // 次の問題を生成
+      const nextProblem = generateNextProblem(problemCount + 2, usedWordsRef.current);
+      setCurrentProblem(nextProblem);
+      setUserInput('');
     } else if (input.length > prevInputLength && acceptable.length > 0) {
       setCorrectChars((prev) => prev + 1);
     }
@@ -153,14 +149,16 @@ export default function Home() {
 
   const resetGame = () => {
     setGameState('ready');
-    setCurrentProblemIndex(0);
-    setShuffledIndices([]);
+    setCurrentProblem(null);
+    setProblemCount(0);
     setUserInput('');
     setCorrectChars(0);
     setTotalChars(0);
+    setCompletedWords([]);
     setStartTime(null);
     setEndTime(null);
     setTimeLeft(60);
+    usedWordsRef.current.clear();
   };
 
 
@@ -219,11 +217,11 @@ export default function Home() {
             </div>
           )}
 
-          {gameState === 'playing' && (
+          {gameState === 'playing' && currentProblem && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div className="text-lg font-bold text-gray-700">
-                  問題 {currentProblemIndex + 1} / {typingProblems.length}
+                  完了: {problemCount}問
                 </div>
                 <div className="text-2xl font-bold text-purple-600">
                   残り {timeLeft}秒
@@ -305,7 +303,7 @@ export default function Home() {
 
               <div className="text-center space-y-4">
                 <p className="text-gray-600">
-                  完了した問題: {currentProblemIndex + 1} / {typingProblems.length}
+                  完了した問題: {problemCount}問
                 </p>
                 <button
                   onClick={resetGame}
