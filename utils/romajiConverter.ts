@@ -28,6 +28,10 @@ const ROMAJI_MAP: { [key: string]: string[] } = {
   'びゃ': ['bya'], 'びゅ': ['byu'], 'びょ': ['byo'],
   'ぴゃ': ['pya'], 'ぴゅ': ['pyu'], 'ぴょ': ['pyo'],
   'ふぁ': ['fa'], 'ふぃ': ['fi'], 'ふぇ': ['fe'], 'ふぉ': ['fo'],
+  'うぃ': ['wi'], 'うぇ': ['we'], 'うぉ': ['wo'],
+  'ゔぁ': ['va'], 'ゔぃ': ['vi'], 'ゔ': ['vu'], 'ゔぇ': ['ve'], 'ゔぉ': ['vo'],
+  'てぃ': ['thi'], 'でぃ': ['dhi'],
+  'とぅ': ['tu'], 'どぅ': ['du'],
   'っ': ['ltu', 'xtu', 'ltsu'],
   'ぁ': ['la', 'xa'], 'ぃ': ['li', 'xi'], 'ぅ': ['lu', 'xu'], 'ぇ': ['le', 'xe'], 'ぉ': ['lo', 'xo'],
   'ゃ': ['lya', 'xya'], 'ゅ': ['lyu', 'xyu'], 'ょ': ['lyo', 'xyo'],
@@ -38,7 +42,66 @@ export function hiraganaToRomaji(hiragana: string): string[] {
   let i = 0;
 
   while (i < hiragana.length) {
-    let matched = false;
+
+    // 促音「っ」の処理
+    if (hiragana[i] === 'っ' && i + 1 < hiragana.length) {
+      // 次の文字を確認（2文字の組み合わせも考慮）
+      let nextRomajiList: string[] = [];
+
+      // まず2文字の組み合わせを試す
+      if (i + 2 < hiragana.length) {
+        const twoChar = hiragana.substring(i + 1, i + 3);
+        if (ROMAJI_MAP[twoChar]) {
+          nextRomajiList = ROMAJI_MAP[twoChar];
+        }
+      }
+
+      // 2文字の組み合わせがなければ1文字を試す
+      if (nextRomajiList.length === 0) {
+        const nextChar = hiragana[i + 1];
+        if (ROMAJI_MAP[nextChar]) {
+          nextRomajiList = ROMAJI_MAP[nextChar];
+        }
+      }
+
+      // 子音のセットを取得（重複を避けるためSetを使用）
+      const consonants = new Set<string>();
+      for (const nextRomaji of nextRomajiList) {
+        if (nextRomaji.length > 0) {
+          const consonant = nextRomaji[0];
+          // 子音の場合のみ追加
+          if (consonant !== 'a' && consonant !== 'i' && consonant !== 'u' && consonant !== 'e' && consonant !== 'o' && consonant !== 'n' && consonant !== '-') {
+            consonants.add(consonant);
+          }
+        }
+      }
+
+      // 子音が取得できた場合、それを重ねる
+      if (consonants.size > 0) {
+        const newResults: string[] = [];
+        for (const result of results) {
+          for (const consonant of consonants) {
+            newResults.push(result + consonant);
+          }
+        }
+        results.length = 0;
+        results.push(...newResults);
+        i += 1;
+        continue;
+      } else {
+        // 通常の「っ」の処理（ltu, xtu, ltsuのいずれか）
+        const newResults: string[] = [];
+        for (const result of results) {
+          for (const romaji of ROMAJI_MAP['っ']) {
+            newResults.push(result + romaji);
+          }
+        }
+        results.length = 0;
+        results.push(...newResults);
+        i += 1;
+        continue;
+      }
+    }
 
     // Try 3-character match first (for combinations like きゃ)
     if (i + 2 < hiragana.length) {
@@ -53,7 +116,6 @@ export function hiraganaToRomaji(hiragana: string): string[] {
         results.length = 0;
         results.push(...newResults);
         i += 3;
-        matched = true;
         continue;
       }
     }
@@ -71,7 +133,6 @@ export function hiraganaToRomaji(hiragana: string): string[] {
         results.length = 0;
         results.push(...newResults);
         i += 2;
-        matched = true;
         continue;
       }
     }
@@ -88,7 +149,6 @@ export function hiraganaToRomaji(hiragana: string): string[] {
       results.length = 0;
       results.push(...newResults);
       i += 1;
-      matched = true;
     } else {
       // Unknown character, just add it as-is
       for (let j = 0; j < results.length; j++) {
