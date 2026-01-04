@@ -6,7 +6,7 @@ import { hiraganaToRomaji } from '@/utils/romajiConverter';
 import { generateNextProblem } from '@/utils/problemGenerator';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 
-type GameState = 'ready' | 'playing' | 'finished';
+type GameState = 'ready' | 'countdown' | 'playing' | 'finished';
 
 export default function Home() {
   const [gameState, setGameState] = useState<GameState>('ready');
@@ -19,6 +19,7 @@ export default function Home() {
   const [timeLeft, setTimeLeft] = useState(10);
   const [results, setResults] = useLocalStorage<TypingResult[]>('typing-results', []);
   const [completedWords, setCompletedWords] = useState<string[]>([]);
+  const [countdown, setCountdown] = useState(3);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -78,25 +79,9 @@ export default function Home() {
   }, [startTime, correctChars, totalChars, completedWords, finishGame]);
 
   const startGame = useCallback(() => {
-    // 最初の問題を生成
-    usedWordsRef.current.clear();
-    const firstProblem = generateNextProblem(1, usedWordsRef.current);
-
-    const now = Date.now();
-    setCurrentProblem(firstProblem);
-    setGameState('playing');
-    setProblemCount(0);
-    setUserInput('');
-    setCorrectChars(0);
-    setTotalChars(0);
-    setCompletedWords([]);
-    setStartTime(now);
-    startTimeRef.current = now;
-    correctCharsRef.current = 0;
-    totalCharsRef.current = 0;
-    completedWordsRef.current = [];
-    setTimeLeft(10);
-    inputRef.current?.focus();
+    // カウントダウンを開始
+    setCountdown(3);
+    setGameState('countdown');
   }, []);
 
   const resetGame = useCallback(() => {
@@ -115,6 +100,40 @@ export default function Home() {
     setTimeLeft(10);
     usedWordsRef.current.clear();
   }, []);
+
+  // カウントダウン処理
+  useEffect(() => {
+    if (gameState !== 'countdown') return;
+
+    if (countdown === 0) {
+      // カウントダウンが0になったら実際にゲームを開始
+      usedWordsRef.current.clear();
+      const firstProblem = generateNextProblem(1, usedWordsRef.current);
+
+      const now = Date.now();
+      setCurrentProblem(firstProblem);
+      setGameState('playing');
+      setProblemCount(0);
+      setUserInput('');
+      setCorrectChars(0);
+      setTotalChars(0);
+      setCompletedWords([]);
+      setStartTime(now);
+      startTimeRef.current = now;
+      correctCharsRef.current = 0;
+      totalCharsRef.current = 0;
+      completedWordsRef.current = [];
+      setTimeLeft(10);
+      inputRef.current?.focus();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setCountdown(prev => prev - 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [gameState, countdown]);
 
   useEffect(() => {
     if (gameState === 'playing' && timerRef.current === null) {
@@ -258,6 +277,19 @@ export default function Home() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {gameState === 'countdown' && (
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="text-center">
+                <p className="text-2xl text-gray-600 mb-8">
+                  まもなく開始します
+                </p>
+                <div className="text-9xl font-bold text-purple-600 animate-pulse">
+                  {countdown}
+                </div>
+              </div>
             </div>
           )}
 
