@@ -10,6 +10,7 @@ Next.js + TypeScript + Tailwind CSSで作成された日本語ローマ字入力
 - ✅ 無限モード（時間内に何問でも挑戦可能）
 - ✅ スコア計測（正しくタイプした文字数）
 - ✅ ミスタイプ回数の表示
+- ✅ ミスタイプ時の視覚・音声フィードバック（背景の赤い点滅＋エラー音）
 - ✅ キーボードショートカット対応（s/スペースでスタート、Escでリセット）
 - ✅ 最近の成績記録（ローカルストレージに最大10件保存）
 - ✅ オンラインランキング機能（Supabase）
@@ -34,12 +35,29 @@ npm install
 
 ### 2. 環境変数の設定
 
-`.env.local`ファイルを作成し、Supabaseの接続情報を設定します：
+プロジェクトのルートディレクトリに`.env.local`ファイルを作成し、Supabaseの接続情報を設定します。
+
+#### 手順
+
+1. `.env.example`ファイルをコピーして`.env.local`を作成：
+
+```bash
+cp .env.example .env.local
+```
+
+2. `.env.local`ファイルを開いて、以下の値を入力：
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
+
+3. Supabaseダッシュボードから必要な情報を取得：
+   - [Supabase](https://supabase.com/)にログイン
+   - プロジェクトを選択
+   - **Settings** > **API** を開く
+   - **Project URL**を`NEXT_PUBLIC_SUPABASE_URL`にコピー
+   - **Project API keys**の**anon public**を`NEXT_PUBLIC_SUPABASE_ANON_KEY`にコピー
 
 ### 3. Supabaseの設定
 
@@ -101,7 +119,8 @@ typing-app/
 │   └── typing.ts         # タイピング関連の型定義
 ├── utils/
 │   ├── romajiConverter.ts   # ひらがな→ローマ字変換ユーティリティ
-│   └── problemGenerator.ts  # ランダム問題生成ユーティリティ
+│   ├── problemGenerator.ts  # ランダム問題生成ユーティリティ
+│   └── sound.ts             # エラー音再生ユーティリティ
 ├── data/
 │   ├── problems.ts       # タイピング問題データ（旧）
 │   └── wordList.ts       # 日本語単語データベース（450語以上）
