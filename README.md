@@ -11,7 +11,9 @@ Next.js + TypeScript + Tailwind CSSで作成された日本語ローマ字入力
 - ✅ スコア計測（正しくタイプした文字数）
 - ✅ ミスタイプ回数の表示
 - ✅ キーボードショートカット対応（s/スペースでスタート、Escでリセット）
-- ✅ 過去の成績記録（ローカルストレージに最大10件保存）
+- ✅ 最近の成績記録（ローカルストレージに最大10件保存）
+- ✅ オンラインランキング機能（Supabase）
+- ✅ TOP3の金・銀・銅メダル表示
 - ✅ レスポンシブデザイン（スマホ・タブレット対応）
 
 ## 技術スタック
@@ -20,7 +22,7 @@ Next.js + TypeScript + Tailwind CSSで作成された日本語ローマ字入力
 - **言語**: TypeScript
 - **スタイリング**: Tailwind CSS
 - **状態管理**: React Hooks
-- **データ保存**: LocalStorage
+- **データ保存**: LocalStorage（個人成績）、Supabase（オンラインランキング）
 
 ## 起動方法
 
@@ -30,13 +32,48 @@ Next.js + TypeScript + Tailwind CSSで作成された日本語ローマ字入力
 npm install
 ```
 
-### 2. 開発サーバーの起動
+### 2. 環境変数の設定
+
+`.env.local`ファイルを作成し、Supabaseの接続情報を設定します：
+
+```
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+### 3. Supabaseの設定
+
+Supabaseのダッシュボードで以下のSQLを実行してテーブルを作成します：
+
+```sql
+CREATE TABLE rankings (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  username TEXT NOT NULL,
+  score INTEGER NOT NULL,
+  completed_count INTEGER NOT NULL,
+  mistypes INTEGER NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- Row Level Security（RLS）の設定
+ALTER TABLE rankings ENABLE ROW LEVEL SECURITY;
+
+-- 全ユーザーが読み取り可能
+CREATE POLICY "Anyone can read rankings" ON rankings
+  FOR SELECT USING (true);
+
+-- 全ユーザーが登録可能
+CREATE POLICY "Anyone can insert rankings" ON rankings
+  FOR INSERT WITH CHECK (true);
+```
+
+### 4. 開発サーバーの起動
 
 ```bash
 npm run dev
 ```
 
-### 3. ブラウザでアクセス
+### 5. ブラウザでアクセス
 
 ブラウザで [http://localhost:3000](http://localhost:3000) を開いてアプリを使用できます。
 
@@ -57,6 +94,9 @@ typing-app/
 │   ├── page.tsx          # メインページ（タイピングゲームUI）
 │   ├── layout.tsx        # レイアウトコンポーネント
 │   └── globals.css       # グローバルスタイル
+├── lib/
+│   ├── supabase.ts       # Supabaseクライアント初期化
+│   └── ranking.ts        # ランキングAPI関数
 ├── types/
 │   └── typing.ts         # タイピング関連の型定義
 ├── utils/
@@ -86,11 +126,21 @@ typing-app/
 - **スコア**: 正しくタイプした文字数の合計
 - **完了した問題数**: 10秒間に完了した問題の数
 - **ミスタイプ**: 間違えてタイプした回数
+- **ランキング登録**: ユーザー名を入力してスコアをオンラインランキングに登録
+- **TOP10ランキング**: 他のユーザーのスコアを確認可能
 - 「もう一度挑戦」ボタン、または **Escキー** で再スタート
 
-### 成績記録
-- 過去10回分のスコアが自動的に保存されます
-- 準備画面の下部に過去の成績一覧（日時とスコア）が表示されます
+### 成績記録（タブ切り替え）
+準備画面で「最近の成績」と「ランキング」をタブで切り替えて表示できます。
+
+#### 最近の成績タブ
+- 過去10回分のスコアが自動的に保存されます（ローカルストレージ）
+- 日時、スコア、単語数、ミス数が表示されます
+
+#### ランキングタブ
+- オンラインでTOP10のスコアを表示
+- TOP3は金・銀・銅のカード形式で表示
+- 4位以下はシンプルな一覧形式で表示
 
 ### キーボードショートカット
 - **sキー** または **スペースキー**: ゲームを開始

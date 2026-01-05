@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { TypingProblem, TypingResult } from '@/types/typing';
+import { TypingProblem, TypingResult, RankingEntry } from '@/types/typing';
 import { hiraganaToRomaji } from '@/utils/romajiConverter';
 import { generateNextProblem } from '@/utils/problemGenerator';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { submitScore, fetchRankings } from '@/lib/ranking';
 
 type GameState = 'ready' | 'countdown' | 'playing' | 'finished';
 
@@ -21,6 +22,11 @@ export default function Home() {
   const [completedWords, setCompletedWords] = useState<string[]>([]);
   const [countdown, setCountdown] = useState(3);
   const [showMistypeEffect, setShowMistypeEffect] = useState(false);
+  const [username, setUsername] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [rankings, setRankings] = useState<RankingEntry[]>([]);
+  const [activeTab, setActiveTab] = useState<'history' | 'ranking'>('history');
 
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -70,6 +76,9 @@ export default function Home() {
 
       setResults((prevResults) => [result, ...prevResults].slice(0, 10));
     }
+
+    // ランキングを自動取得
+    fetchRankings(10).then(data => setRankings(data));
   }, [setResults]);
 
   // Refを同期
@@ -102,6 +111,39 @@ export default function Home() {
     completedWordsRef.current = [];
     setTimeLeft(10);
     usedWordsRef.current.clear();
+    setUsername('');
+    setSubmitStatus('idle');
+  }, []);
+
+  const handleSubmitScore = async () => {
+    if (!username.trim() || isSubmitting) return;
+
+    setIsSubmitting(true);
+    const latestResult = results[0];
+    if (!latestResult) {
+      setIsSubmitting(false);
+      return;
+    }
+
+    const result = await submitScore({
+      username: username.trim(),
+      score: latestResult.score,
+      completedCount: latestResult.completedCount ?? 0,
+      mistypes: latestResult.mistypes ?? 0,
+    });
+
+    setIsSubmitting(false);
+    setSubmitStatus(result.success ? 'success' : 'error');
+
+    if (result.success) {
+      const newRankings = await fetchRankings(10);
+      setRankings(newRankings);
+    }
+  };
+
+  const loadRankings = useCallback(async () => {
+    const data = await fetchRankings(10);
+    setRankings(data);
   }, []);
 
   // カウントダウン処理
@@ -262,61 +304,188 @@ export default function Home() {
               </div>
 
 
-              {results.length > 0 && (
-                <div className="mt-8">
-                  <h2 className="text-xl font-bold mb-4 text-gray-800">過去の成績</h2>
-                  <div className="space-y-3">
-                    {results.map((result, index) => {
-                      const isTopScore = index === results.indexOf(
-                        results.reduce((max, r) => r.score > max.score ? r : max, results[0])
-                      );
-                      return (
-                        <div
-                          key={index}
-                          className={`relative overflow-hidden rounded-xl p-4 transition-all hover:shadow-lg ${
-                            isTopScore
-                              ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-300'
-                              : 'bg-gradient-to-r from-gray-50 to-slate-50 border border-gray-200'
-                          }`}
-                        >
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <div className="flex items-center gap-4">
-                              <div className={`text-4xl font-bold ${isTopScore ? 'text-yellow-600' : 'text-purple-600'}`}>
-                                {result.score}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {new Date(result.date).toLocaleDateString('ja-JP', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </div>
-                              {isTopScore && (
-                                <div className="bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full">
-                                  ベスト
+              {/* タブ切り替え */}
+              <div className="mt-8">
+                <div className="flex border-b border-gray-200 mb-4">
+                  <button
+                    onClick={() => setActiveTab('history')}
+                    className={`px-4 py-2 font-bold transition-colors ${
+                      activeTab === 'history'
+                        ? 'text-purple-600 border-b-2 border-purple-600'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    最近の成績
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setActiveTab('ranking');
+                      if (rankings.length === 0) {
+                        await loadRankings();
+                      }
+                    }}
+                    className={`px-4 py-2 font-bold transition-colors ${
+                      activeTab === 'ranking'
+                        ? 'text-purple-600 border-b-2 border-purple-600'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    ランキング
+                  </button>
+                </div>
+
+                {/* 最近の成績タブ */}
+                {activeTab === 'history' && (
+                  <>
+                    {results.length > 0 ? (
+                      <div className="space-y-3">
+                        {results.map((result, index) => {
+                          const isTopScore = index === results.indexOf(
+                            results.reduce((max, r) => r.score > max.score ? r : max, results[0])
+                          );
+                          return (
+                            <div
+                              key={index}
+                              className={`relative overflow-hidden rounded-xl p-4 transition-all hover:shadow-lg ${
+                                isTopScore
+                                  ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-300'
+                                  : 'bg-gradient-to-r from-gray-50 to-slate-50 border border-gray-200'
+                              }`}
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div className="flex items-center gap-4">
+                                  <div className={`text-4xl font-bold ${isTopScore ? 'text-yellow-600' : 'text-purple-600'}`}>
+                                    {result.score}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {new Date(result.date).toLocaleDateString('ja-JP', {
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </div>
+                                  {isTopScore && (
+                                    <div className="bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full">
+                                      ベスト
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                            <div className="flex gap-4 text-sm">
-                              <div className="flex flex-col items-center px-3 py-1 bg-white rounded-lg shadow-sm">
-                                <span className="text-gray-500 text-xs">単語数</span>
-                                <span className="font-bold text-gray-700">{result.completedCount ?? '-'}</span>
+                                <div className="flex gap-4 text-sm">
+                                  <div className="flex flex-col items-center px-3 py-1 bg-white rounded-lg shadow-sm">
+                                    <span className="text-gray-500 text-xs">単語数</span>
+                                    <span className="font-bold text-gray-700">{result.completedCount ?? '-'}</span>
+                                  </div>
+                                  <div className="flex flex-col items-center px-3 py-1 bg-white rounded-lg shadow-sm">
+                                    <span className="text-gray-500 text-xs">ミス</span>
+                                    <span className={`font-bold ${(result.mistypes ?? 0) === 0 ? 'text-green-600' : (result.mistypes ?? 0) <= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                      {result.mistypes ?? '-'}
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="flex flex-col items-center px-3 py-1 bg-white rounded-lg shadow-sm">
-                                <span className="text-gray-500 text-xs">ミス</span>
-                                <span className={`font-bold ${(result.mistypes ?? 0) === 0 ? 'text-green-600' : (result.mistypes ?? 0) <= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                  {result.mistypes ?? '-'}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-center text-gray-500 py-8">まだ記録がありません</p>
+                    )}
+                  </>
+                )}
+
+                {/* ランキングタブ */}
+                {activeTab === 'ranking' && (
+                  <>
+                    {rankings.length > 0 ? (
+                      <div className="space-y-3">
+                        {/* TOP3: リッチ表示 */}
+                        {rankings.slice(0, 3).map((entry, index) => (
+                          <div
+                            key={entry.id}
+                            className={`relative overflow-hidden rounded-xl p-4 transition-all hover:shadow-lg ${
+                              index === 0
+                                ? 'bg-gradient-to-r from-yellow-100 to-amber-100 border-2 border-yellow-400'
+                                : index === 1
+                                ? 'bg-gradient-to-r from-slate-100 to-gray-200 border-2 border-slate-400'
+                                : 'bg-gradient-to-r from-orange-100 to-amber-200 border-2 border-orange-400'
+                            }`}
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div className="flex items-center gap-4">
+                                <span className={`text-2xl font-bold w-8 ${
+                                  index === 0 ? 'text-yellow-500' : index === 1 ? 'text-slate-400' : 'text-orange-500'
+                                }`}>
+                                  {index + 1}
                                 </span>
+                                <div className={`text-4xl font-bold ${
+                                  index === 0 ? 'text-yellow-500' : index === 1 ? 'text-slate-400' : 'text-orange-500'
+                                }`}>
+                                  {entry.score}
+                                </div>
+                                <span className="font-bold text-gray-800">{entry.username}</span>
+                                <span className="text-sm text-gray-500">
+                                  {new Date(entry.created_at).toLocaleDateString('ja-JP', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                              </div>
+                              <div className="flex gap-4 text-sm">
+                                <div className="flex flex-col items-center px-3 py-1 bg-white rounded-lg shadow-sm">
+                                  <span className="text-gray-500 text-xs">単語数</span>
+                                  <span className="font-bold text-gray-700">{entry.completed_count}</span>
+                                </div>
+                                <div className="flex flex-col items-center px-3 py-1 bg-white rounded-lg shadow-sm">
+                                  <span className="text-gray-500 text-xs">ミス</span>
+                                  <span className={`font-bold ${entry.mistypes === 0 ? 'text-green-600' : entry.mistypes <= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                    {entry.mistypes}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                        ))}
+
+                        {/* 4位以下: シンプル表示 */}
+                        {rankings.length > 3 && (
+                          <div className="border border-gray-200 rounded-lg overflow-hidden">
+                            <table className="w-full text-sm">
+                              <tbody>
+                                {rankings.slice(3).map((entry, index) => (
+                                  <tr key={entry.id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+                                    <td className="py-2 px-3 text-gray-500 font-bold w-8">{index + 4}</td>
+                                    <td className="py-2 px-3 font-bold text-purple-600">{entry.score}</td>
+                                    <td className="py-2 px-3 text-gray-800">{entry.username}</td>
+                                    <td className="py-2 px-3 text-gray-700">{entry.completed_count}</td>
+                                    <td className={`py-2 px-3 ${entry.mistypes === 0 ? 'text-green-600' : entry.mistypes <= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                      {entry.mistypes}
+                                    </td>
+                                    <td className="py-2 px-3 text-gray-500 text-xs">
+                                      {new Date(entry.created_at).toLocaleDateString('ja-JP', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-center text-gray-500 py-8">ランキングを読み込み中...</p>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )}
 
@@ -415,6 +584,145 @@ export default function Home() {
                 <p className="text-gray-600">
                   ミスタイプ: {totalChars - correctChars}回
                 </p>
+              </div>
+
+              {/* ランキング登録フォーム */}
+              {submitStatus === 'idle' && (
+                <div className="bg-gray-50 p-6 rounded-lg">
+                  <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">
+                    ランキングに登録
+                  </h3>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="ユーザー名を入力"
+                      maxLength={20}
+                      className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 w-full sm:w-64"
+                    />
+                    <button
+                      onClick={handleSubmitScore}
+                      disabled={!username.trim() || isSubmitting}
+                      className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-bold disabled:bg-gray-400 disabled:cursor-not-allowed w-full sm:w-auto"
+                    >
+                      {isSubmitting ? '送信中...' : '登録する'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {submitStatus === 'success' && (
+                <div className="bg-green-50 border border-green-300 p-4 rounded-lg text-center">
+                  <p className="text-green-700 font-bold">ランキングに登録しました！</p>
+                </div>
+              )}
+
+              {submitStatus === 'error' && (
+                <div className="bg-red-50 border border-red-300 p-4 rounded-lg text-center">
+                  <p className="text-red-700">登録に失敗しました。もう一度お試しください。</p>
+                  <button
+                    onClick={() => setSubmitStatus('idle')}
+                    className="mt-2 text-sm text-red-600 underline"
+                  >
+                    再試行
+                  </button>
+                </div>
+              )}
+
+              {/* ランキング表示 */}
+              <div className="bg-gray-50 p-6 rounded-lg">
+                <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">
+                  ランキング TOP10
+                </h3>
+                {rankings.length > 0 ? (
+                  <div className="space-y-3">
+                    {/* TOP3: リッチ表示 */}
+                    {rankings.slice(0, 3).map((entry, index) => (
+                      <div
+                        key={entry.id}
+                        className={`relative overflow-hidden rounded-xl p-4 transition-all ${
+                          index === 0
+                            ? 'bg-gradient-to-r from-yellow-100 to-amber-100 border-2 border-yellow-400'
+                            : index === 1
+                            ? 'bg-gradient-to-r from-slate-100 to-gray-200 border-2 border-slate-400'
+                            : 'bg-gradient-to-r from-orange-100 to-amber-200 border-2 border-orange-400'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="flex items-center gap-4">
+                            <span className={`text-2xl font-bold w-8 ${
+                              index === 0 ? 'text-yellow-500' : index === 1 ? 'text-slate-400' : 'text-orange-500'
+                            }`}>
+                              {index + 1}
+                            </span>
+                            <div className={`text-4xl font-bold ${
+                              index === 0 ? 'text-yellow-500' : index === 1 ? 'text-slate-400' : 'text-orange-500'
+                            }`}>
+                              {entry.score}
+                            </div>
+                            <span className="font-bold text-gray-800">{entry.username}</span>
+                            <span className="text-sm text-gray-500">
+                              {new Date(entry.created_at).toLocaleDateString('ja-JP', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex gap-4 text-sm">
+                            <div className="flex flex-col items-center px-3 py-1 bg-white rounded-lg shadow-sm">
+                              <span className="text-gray-500 text-xs">単語数</span>
+                              <span className="font-bold text-gray-700">{entry.completed_count}</span>
+                            </div>
+                            <div className="flex flex-col items-center px-3 py-1 bg-white rounded-lg shadow-sm">
+                              <span className="text-gray-500 text-xs">ミス</span>
+                              <span className={`font-bold ${entry.mistypes === 0 ? 'text-green-600' : entry.mistypes <= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                {entry.mistypes}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* 4位以下: シンプル表示 */}
+                    {rankings.length > 3 && (
+                      <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                        <table className="w-full text-sm">
+                          <tbody>
+                            {rankings.slice(3).map((entry, index) => (
+                              <tr key={entry.id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+                                <td className="py-2 px-3 text-gray-500 font-bold w-8">{index + 4}</td>
+                                <td className="py-2 px-3 font-bold text-purple-600">{entry.score}</td>
+                                <td className="py-2 px-3 text-gray-800">{entry.username}</td>
+                                <td className="py-2 px-3 text-gray-700">{entry.completed_count}</td>
+                                <td className={`py-2 px-3 ${entry.mistypes === 0 ? 'text-green-600' : entry.mistypes <= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                  {entry.mistypes}
+                                </td>
+                                <td className="py-2 px-3 text-gray-500 text-xs">
+                                  {new Date(entry.created_at).toLocaleDateString('ja-JP', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-500 py-4">読み込み中...</p>
+                )}
+              </div>
+
+              <div className="text-center space-y-2">
                 <p className="text-sm text-gray-500">
                   Escキー でやり直す
                 </p>
