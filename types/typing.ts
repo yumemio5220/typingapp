@@ -12,6 +12,8 @@ export interface TypingResult {
   timeElapsed: number;
   problemText: string;
   date: string;
+  completedCount?: number;
+  mistypes?: number;
 }
 
 export interface ScoreRecord {

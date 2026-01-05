@@ -16,7 +16,7 @@ export default function Home() {
   const [correctChars, setCorrectChars] = useState(0);
   const [totalChars, setTotalChars] = useState(0);
   const [startTime, setStartTime] = useState<number | null>(null);
-  const [timeLeft, setTimeLeft] = useState(60);
+  const [timeLeft, setTimeLeft] = useState(10);
   const [results, setResults] = useLocalStorage<TypingResult[]>('typing-results', []);
   const [completedWords, setCompletedWords] = useState<string[]>([]);
   const [countdown, setCountdown] = useState(3);
@@ -63,6 +63,8 @@ export default function Home() {
         timeElapsed,
         problemText: completedWordsRef.current.slice(0, 5).join(', ') + (completedWordsRef.current.length > 5 ? ' ...' : ''),
         date: new Date().toISOString(),
+        completedCount: completedWordsRef.current.length,
+        mistypes: totalCharsRef.current - correctCharsRef.current,
       };
 
       setResults((prevResults) => [result, ...prevResults].slice(0, 10));
@@ -97,7 +99,7 @@ export default function Home() {
     correctCharsRef.current = 0;
     totalCharsRef.current = 0;
     completedWordsRef.current = [];
-    setTimeLeft(60);
+    setTimeLeft(10);
     usedWordsRef.current.clear();
   }, []);
 
@@ -123,7 +125,7 @@ export default function Home() {
       correctCharsRef.current = 0;
       totalCharsRef.current = 0;
       completedWordsRef.current = [];
-      setTimeLeft(60);
+      setTimeLeft(10);
       inputRef.current?.focus();
       return;
     }
@@ -254,26 +256,56 @@ export default function Home() {
 
               {results.length > 0 && (
                 <div className="mt-8">
-                  <h2 className="text-xl font-bold mb-4">過去の成績</h2>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="px-4 py-2 text-left">日時</th>
-                          <th className="px-4 py-2 text-right">スコア</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {results.map((result, index) => (
-                          <tr key={index} className="border-t">
-                            <td className="px-4 py-2">
-                              {new Date(result.date).toLocaleString('ja-JP')}
-                            </td>
-                            <td className="px-4 py-2 text-right font-bold">{result.score}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <h2 className="text-xl font-bold mb-4 text-gray-800">過去の成績</h2>
+                  <div className="space-y-3">
+                    {results.map((result, index) => {
+                      const isTopScore = index === results.indexOf(
+                        results.reduce((max, r) => r.score > max.score ? r : max, results[0])
+                      );
+                      return (
+                        <div
+                          key={index}
+                          className={`relative overflow-hidden rounded-xl p-4 transition-all hover:shadow-lg ${
+                            isTopScore
+                              ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-300'
+                              : 'bg-gradient-to-r from-gray-50 to-slate-50 border border-gray-200'
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="flex items-center gap-4">
+                              <div className={`text-4xl font-bold ${isTopScore ? 'text-yellow-600' : 'text-purple-600'}`}>
+                                {result.score}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {new Date(result.date).toLocaleDateString('ja-JP', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </div>
+                              {isTopScore && (
+                                <div className="bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full">
+                                  ベスト
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex gap-4 text-sm">
+                              <div className="flex flex-col items-center px-3 py-1 bg-white rounded-lg shadow-sm">
+                                <span className="text-gray-500 text-xs">単語数</span>
+                                <span className="font-bold text-gray-700">{result.completedCount ?? '-'}</span>
+                              </div>
+                              <div className="flex flex-col items-center px-3 py-1 bg-white rounded-lg shadow-sm">
+                                <span className="text-gray-500 text-xs">ミス</span>
+                                <span className={`font-bold ${(result.mistypes ?? 0) === 0 ? 'text-green-600' : (result.mistypes ?? 0) <= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                  {result.mistypes ?? '-'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
