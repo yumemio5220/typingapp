@@ -6,6 +6,7 @@ import { hiraganaToRomaji } from '@/utils/romajiConverter';
 import { generateNextProblem } from '@/utils/problemGenerator';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { submitScore, fetchRankings } from '@/lib/ranking';
+import { playErrorSound } from '@/utils/sound';
 
 type GameState = 'ready' | 'countdown' | 'playing' | 'finished';
 
@@ -248,9 +249,10 @@ export default function Home() {
     const acceptable = allPossibleRomaji.filter(romaji => romaji.startsWith(input));
 
     if (acceptable.length === 0 && input.length > 0) {
-      // ミスタイプ時に背景エフェクトを表示
+      // ミスタイプ時に背景エフェクトを表示＆エラー音を再生
       setShowMistypeEffect(true);
       setTimeout(() => setShowMistypeEffect(false), 150);
+      playErrorSound();
       return;
     }
 
