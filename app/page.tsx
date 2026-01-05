@@ -20,6 +20,7 @@ export default function Home() {
   const [results, setResults] = useLocalStorage<TypingResult[]>('typing-results', []);
   const [completedWords, setCompletedWords] = useState<string[]>([]);
   const [countdown, setCountdown] = useState(3);
+  const [showMistypeEffect, setShowMistypeEffect] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -205,6 +206,9 @@ export default function Home() {
     const acceptable = allPossibleRomaji.filter(romaji => romaji.startsWith(input));
 
     if (acceptable.length === 0 && input.length > 0) {
+      // ミスタイプ時に背景エフェクトを表示
+      setShowMistypeEffect(true);
+      setTimeout(() => setShowMistypeEffect(false), 150);
       return;
     }
 
@@ -229,7 +233,11 @@ export default function Home() {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 py-4 sm:py-8 px-2 sm:px-4">
+    <div className={`min-h-screen py-4 sm:py-8 px-2 sm:px-4 transition-colors duration-100 ${
+      showMistypeEffect
+        ? 'bg-red-200'
+        : 'bg-gradient-to-br from-purple-50 to-pink-100'
+    }`}>
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-8">
           <h1 className="text-2xl sm:text-4xl font-bold text-gray-800 mb-6 sm:mb-8 text-center">
