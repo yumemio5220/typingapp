@@ -20,3 +20,12 @@ export interface ScoreRecord {
   id: string;
   results: TypingResult[];
 }
+
+export interface RankingEntry {
+  id: string;
+  username: string;
+  score: number;
+  completed_count: number;
+  mistypes: number;
+  created_at: string;
+}
