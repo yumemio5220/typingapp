@@ -94,16 +94,12 @@ export default function Home() {
   useEffect(() => {
     savedUsernameRef.current = savedUsername;
     usernameRef.current = username;
-  }, [savedUsername, username]);
-
-  // Refを同期
-  useEffect(() => {
     startTimeRef.current = startTime;
     correctCharsRef.current = correctChars;
     totalCharsRef.current = totalChars;
     completedWordsRef.current = completedWords;
     finishGameRef.current = finishGame;
-  }, [startTime, correctChars, totalChars, completedWords, finishGame]);
+  }, [savedUsername, username, startTime, correctChars, totalChars, completedWords, finishGame]);
 
   const startGame = useCallback(() => {
     // カウントダウンを開始
