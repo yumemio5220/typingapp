@@ -38,6 +38,7 @@ export default function Home() {
   const totalCharsRef = useRef(0);
   const completedWordsRef = useRef<string[]>([]);
   const finishGameRef = useRef<(() => void) | null>(null);
+  const savedUsernameRef = useRef(savedUsername);
 
   const getTargetRomaji = () => {
     if (!currentProblem) return '';
@@ -83,8 +84,15 @@ export default function Home() {
     fetchRankings(10).then(data => setRankings(data));
 
     // 保存されたユーザー名をデフォルト値として設定
-    setUsername(savedUsername);
-  }, [setResults, savedUsername]);
+    if (savedUsernameRef.current) {
+      setUsername(savedUsernameRef.current);
+    }
+  }, [setResults]);
+
+  // savedUsernameRefを同期
+  useEffect(() => {
+    savedUsernameRef.current = savedUsername;
+  }, [savedUsername]);
 
   // Refを同期
   useEffect(() => {
