@@ -23,6 +23,7 @@ export default function Home() {
   const [completedWords, setCompletedWords] = useState<string[]>([]);
   const [countdown, setCountdown] = useState(3);
   const [showMistypeEffect, setShowMistypeEffect] = useState(false);
+  const [savedUsername, setSavedUsername] = useLocalStorage<string>('typing-username', '');
   const [username, setUsername] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -80,7 +81,10 @@ export default function Home() {
 
     // ランキングを自動取得
     fetchRankings(10).then(data => setRankings(data));
-  }, [setResults]);
+
+    // 保存されたユーザー名をデフォルト値として設定
+    setUsername(savedUsername);
+  }, [setResults, savedUsername]);
 
   // Refを同期
   useEffect(() => {
@@ -112,7 +116,6 @@ export default function Home() {
     completedWordsRef.current = [];
     setTimeLeft(10);
     usedWordsRef.current.clear();
-    setUsername('');
     setSubmitStatus('idle');
   }, []);
 
@@ -137,6 +140,8 @@ export default function Home() {
     setSubmitStatus(result.success ? 'success' : 'error');
 
     if (result.success) {
+      // ユーザー名をlocalStorageに保存
+      setSavedUsername(username.trim());
       const newRankings = await fetchRankings(10);
       setRankings(newRankings);
     }
