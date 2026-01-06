@@ -23,6 +23,7 @@ export default function Home() {
   const [completedWords, setCompletedWords] = useState<string[]>([]);
   const [countdown, setCountdown] = useState(3);
   const [showMistypeEffect, setShowMistypeEffect] = useState(false);
+  const [savedUsername, setSavedUsername] = useLocalStorage<string>('typing-username', '');
   const [username, setUsername] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -37,6 +38,8 @@ export default function Home() {
   const totalCharsRef = useRef(0);
   const completedWordsRef = useRef<string[]>([]);
   const finishGameRef = useRef<(() => void) | null>(null);
+  const savedUsernameRef = useRef(savedUsername);
+  const usernameRef = useRef(username);
 
   const getTargetRomaji = () => {
     if (!currentProblem) return '';
@@ -80,16 +83,23 @@ export default function Home() {
 
     // ランキングを自動取得
     fetchRankings(10).then(data => setRankings(data));
+
+    // 保存されたユーザー名をデフォルト値として設定（空の場合のみ）
+    if (!usernameRef.current && savedUsernameRef.current) {
+      setUsername(savedUsernameRef.current);
+    }
   }, [setResults]);
 
   // Refを同期
   useEffect(() => {
+    savedUsernameRef.current = savedUsername;
+    usernameRef.current = username;
     startTimeRef.current = startTime;
     correctCharsRef.current = correctChars;
     totalCharsRef.current = totalChars;
     completedWordsRef.current = completedWords;
     finishGameRef.current = finishGame;
-  }, [startTime, correctChars, totalChars, completedWords, finishGame]);
+  }, [savedUsername, username, startTime, correctChars, totalChars, completedWords, finishGame]);
 
   const startGame = useCallback(() => {
     // カウントダウンを開始
@@ -112,7 +122,6 @@ export default function Home() {
     completedWordsRef.current = [];
     setTimeLeft(10);
     usedWordsRef.current.clear();
-    setUsername('');
     setSubmitStatus('idle');
   }, []);
 
@@ -137,6 +146,8 @@ export default function Home() {
     setSubmitStatus(result.success ? 'success' : 'error');
 
     if (result.success) {
+      // ユーザー名をlocalStorageに保存
+      setSavedUsername(username.trim());
       const newRankings = await fetchRankings(10);
       setRankings(newRankings);
     }
